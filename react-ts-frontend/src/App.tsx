@@ -3,7 +3,7 @@ import { getNotes, createNote, type Note } from './api'
 
 
 export default function App() {
-  const [notes, setNotes] = useState<Note[]>([])
+  const [notes, setNotes] = useState<Note[]>([]);
   const [text, setText] = useState<string>('')
 
   useEffect(() => {
@@ -43,8 +43,8 @@ export default function App() {
 
 
         <ul>
-          {notes.map((n) => (
-          <li key={n.id}>{n.text}</li>
+          {notes?.map(n => (
+            <li key={n.id}>{n.text}</li>
           ))}
         </ul>
       </section>
