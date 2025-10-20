@@ -1,10 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
-	"sync"
+	"os"
+
+	_ "github.com/lib/pq"
 )
 
 type Note struct {
@@ -12,17 +15,32 @@ type Note struct {
 	Text string `json:"text"`
 }
 
-var (
-	notes  = []Note{}
-	nextID = 1
-	notesMu sync.Mutex
-)
+var db *sql.DB
 
 func main() {
+	var err error
+
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "add your postgres connection string here"
+	}
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Database connection failed:", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		log.Fatal("Database unreachable:", err)
+	}
+
+	log.Println("Connected to PostgreSQL ✅")
+
+	createTable()
+
 	http.HandleFunc("/api/notes", notesHandler)
 
 	addr := ":8080"
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Server running on %s", addr)
 	if err := http.ListenAndServe(addr, corsMiddleware(http.DefaultServeMux)); err != nil {
 		log.Fatal(err)
 	}
@@ -40,28 +58,57 @@ func notesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getNotes(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query("SELECT id, text FROM notes ORDER BY id ASC")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var notes []Note
+	for rows.Next() {
+		var n Note
+		if err := rows.Scan(&n.ID, &n.Text); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		notes = append(notes, n)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	notesMu.Lock()
-	defer notesMu.Unlock()
 	json.NewEncoder(w).Encode(notes)
 }
 
 func createNote(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	var in struct{ Text string `json:"text"` }
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
+	}
+
+	var id int
+	err := db.QueryRow("INSERT INTO notes (text) VALUES ($1) RETURNING id", in.Text).Scan(&id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	note := Note{ID: id, Text: in.Text}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(note)
 }
 
-notesMu.Lock()
-	defer notesMu.Unlock()
-	n := Note{ID: nextID, Text: in.Text}
-	nextID++
-	notes = append(notes, n)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(n)
+func createTable() {
+	query := `
+	CREATE TABLE IF NOT EXISTS notes (
+		id SERIAL PRIMARY KEY,
+		text TEXT NOT NULL
+	);
+	`
+	if _, err := db.Exec(query); err != nil {
+		log.Fatal("Failed to create table:", err)
+	}
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
