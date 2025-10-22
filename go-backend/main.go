@@ -42,7 +42,6 @@ func main() {
 
 	createTable()
 
-	// Define routes
 	http.HandleFunc("/api/notes", notesHandler)
 	http.HandleFunc("/api/notes/", deleteNoteHandler)
 
@@ -52,8 +51,6 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
-// --------------------- HANDLERS ---------------------
 
 func notesHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -131,8 +128,6 @@ func deleteNoteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --------------------- DB SETUP ---------------------
-
 func createTable() {
 	query := `
 	CREATE TABLE IF NOT EXISTS notes (
@@ -145,8 +140,6 @@ func createTable() {
 		log.Fatal("Failed to create table:", err)
 	}
 }
-
-// --------------------- MIDDLEWARE ---------------------
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

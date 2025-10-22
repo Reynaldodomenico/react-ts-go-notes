@@ -1,6 +1,7 @@
 export interface Note {
-    id: number
-    text: string
+  id: number
+  text: string
+  created_at: string
 }
 
 export async function getNotes(): Promise<Note[]> {
@@ -33,3 +34,11 @@ export async function createNote(text: string): Promise<Note> {
 
     return data
 }
+
+export async function deleteNote(id: number): Promise<void> {
+  const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete note')
+}
+
+
+
