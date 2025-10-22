@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/reynaldodomenico/react-and-go-notes/go-backend/db"
 	"github.com/reynaldodomenico/react-and-go-notes/go-backend/models"
 )
 
-func GetNotes(w http.ResponseWriter, r *http.Request) {
+func GetNotes(c *gin.Context) {
 	rows, err := db.DB.Query(`SELECT id, text, created_at FROM notes ORDER BY id DESC`)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
@@ -22,18 +21,19 @@ func GetNotes(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var n models.Note
 		if err := rows.Scan(&n.ID, &n.Text, &n.CreatedAt); err != nil {
-			http.Error(w, err.Error(), 500)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		notes = append(notes, n)
 	}
-	json.NewEncoder(w).Encode(notes)
+
+	c.JSON(http.StatusOK, notes)
 }
 
-func CreateNote(w http.ResponseWriter, r *http.Request) {
+func CreateNote(c *gin.Context) {
 	var n models.Note
-	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
-		http.Error(w, "Invalid input", 400)
+	if err := c.ShouldBindJSON(&n); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
@@ -42,24 +42,25 @@ func CreateNote(w http.ResponseWriter, r *http.Request) {
 		n.Text,
 	).Scan(&n.ID, &n.Text, &n.CreatedAt)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(n)
+
+	c.JSON(http.StatusCreated, n)
 }
 
-func DeleteNote(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/api/notes/")
-	id, err := strconv.Atoi(idStr)
+func DeleteNote(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		http.Error(w, "Invalid ID", 400)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 		return
 	}
+
 	_, err = db.DB.Exec(`DELETE FROM notes WHERE id=$1`, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+
+	c.Status(http.StatusNoContent)
 }
