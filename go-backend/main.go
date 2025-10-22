@@ -6,13 +6,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	_ "github.com/lib/pq"
 )
 
 type Note struct {
-	ID   int    `json:"id"`
-	Text string `json:"text"`
+	ID        int    `json:"id"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
 }
 
 var db *sql.DB
@@ -22,8 +25,10 @@ func main() {
 
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		connStr = "add your postgres connection string here"
+		// Replace with your actual connection string
+		connStr = "postgres://postgres:passwordhere@localhost:5432/notesdb?sslmode=disable"
 	}
+
 	db, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Database connection failed:", err)
@@ -37,7 +42,9 @@ func main() {
 
 	createTable()
 
+	// Define routes
 	http.HandleFunc("/api/notes", notesHandler)
+	http.HandleFunc("/api/notes/", deleteNoteHandler)
 
 	addr := ":8080"
 	log.Printf("Server running on %s", addr)
@@ -45,6 +52,8 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// --------------------- HANDLERS ---------------------
 
 func notesHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -58,7 +67,7 @@ func notesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getNotes(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, text FROM notes ORDER BY id ASC")
+	rows, err := db.Query(`SELECT id, text, created_at FROM notes ORDER BY id ASC`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -68,7 +77,7 @@ func getNotes(w http.ResponseWriter, r *http.Request) {
 	var notes []Note
 	for rows.Next() {
 		var n Note
-		if err := rows.Scan(&n.ID, &n.Text); err != nil {
+		if err := rows.Scan(&n.ID, &n.Text, &n.CreatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -86,24 +95,50 @@ func createNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var id int
-	err := db.QueryRow("INSERT INTO notes (text) VALUES ($1) RETURNING id", in.Text).Scan(&id)
+	var note Note
+	err := db.QueryRow(`INSERT INTO notes (text) VALUES ($1) RETURNING id, text, created_at`, in.Text).Scan(
+		&note.ID, &note.Text, &note.CreatedAt,
+	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	note := Note{ID: id, Text: in.Text}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(note)
 }
 
+func deleteNoteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/notes/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	_, err = db.Exec(`DELETE FROM notes WHERE id = $1`, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --------------------- DB SETUP ---------------------
+
 func createTable() {
 	query := `
 	CREATE TABLE IF NOT EXISTS notes (
 		id SERIAL PRIMARY KEY,
-		text TEXT NOT NULL
+		text TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 	`
 	if _, err := db.Exec(query); err != nil {
@@ -111,11 +146,13 @@ func createTable() {
 	}
 }
 
+// --------------------- MIDDLEWARE ---------------------
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
