@@ -9,6 +9,7 @@ import (
 
 func main() {
 	db.Connect()
+	db.Migrate()
 
 	r := router.SetupRouter()
 
