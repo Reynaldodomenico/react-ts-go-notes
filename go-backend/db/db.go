@@ -6,17 +6,22 @@ import (
 	"os"
 
 	_ "github.com/lib/pq"
+	"github.com/joho/godotenv"
 )
 
 var DB *sql.DB
 
 func Connect() {
-	connStr := os.Getenv("DATABASE_URL")
-	if connStr == "" {
-		connStr = "postgres://credentials_here@localhost:5432/notesdb?sslmode=disable"
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("⚠️  No .env file found, using system environment variables")
 	}
 
-	var err error
+	connStr := os.Getenv("DATABASE_URL_LOCAL")
+	if connStr == "" {
+		log.Fatal("❌ DATABASE_URL not set in environment")
+	}
+
 	DB, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("❌ Failed to open database:", err)
