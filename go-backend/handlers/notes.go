@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -10,25 +11,28 @@ import (
 )
 
 func GetNotes(c *gin.Context) {
-	rows, err := db.DB.Query(`SELECT id, text, created_at FROM notes ORDER BY id DESC`)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	defer rows.Close()
+    rows, err := db.DB.Query("SELECT id, text, created_at FROM notes ORDER BY id DESC")
+    if err != nil {
+        log.Println("❌ DB query error:", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    defer rows.Close()
 
-	var notes []models.Note
-	for rows.Next() {
-		var n models.Note
-		if err := rows.Scan(&n.ID, &n.Text, &n.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		notes = append(notes, n)
-	}
+    var notes []models.Note
+    for rows.Next() {
+        var n models.Note
+        if err := rows.Scan(&n.ID, &n.Text, &n.CreatedAt); err != nil {
+            log.Println("❌ Row scan error:", err)
+            c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+            return
+        }
+        notes = append(notes, n)
+    }
 
-	c.JSON(http.StatusOK, notes)
+    c.JSON(http.StatusOK, notes)
 }
+
 
 func CreateNote(c *gin.Context) {
 	var n models.Note

@@ -4,8 +4,11 @@ export interface Note {
   created_at: string
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+
 export async function getNotes(): Promise<Note[]> {
-    const res = await fetch('/api/notes')
+    const res = await fetch(`${API_BASE}/api/notes`)
 
     if (!res.ok) {
         throw new Error(`Failed to fetch notes: ${res.statusText}`)
@@ -16,7 +19,7 @@ export async function getNotes(): Promise<Note[]> {
 }
 
 export async function createNote(text: string): Promise<Note> {
-    const res = await fetch('/api/notes', {
+    const res = await fetch(`${API_BASE}/api/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
@@ -36,7 +39,7 @@ export async function createNote(text: string): Promise<Note> {
 }
 
 export async function deleteNote(id: number): Promise<void> {
-  const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/api/notes/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete note')
 }
 
